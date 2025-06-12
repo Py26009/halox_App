@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:halox_app/Bottom_nav_bar/Bottom_Nav_Bar.dart';
-import 'package:halox_app/State%20Management/Provider%20State%20management/User%20Data%20Provider/All%20homes%20list%20provider.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'App_Screens/Home Bottom Nav Screens/Device_Specific_Screen.dart';
 import 'App_Screens/Home Bottom Nav Screens/Specific room Screen.dart';
 import 'App_Screens/Home_Setup_InitialPage.dart';
 import 'App_Screens/Settings Screen/Account_Family Screens/Account and family Screen.dart';
@@ -14,23 +15,37 @@ import 'OnBoarding/Basic_details.dart';
 import 'OnBoarding/LoginPage.dart';
 import 'OnBoarding/Sign_up Page.dart';
 import 'Splash_Screen/splash screen.dart';
+import 'State Management/BLoC/device_usage/device_usage_event.dart';
+import 'State Management/Provider State management/User Data Provider/All homes list provider.dart';
 import 'State Management/Provider State management/User Data Provider/User Data Provider.dart';
 import 'State Management/Provider State management/User Data Provider/home_name Provider.dart';
+import 'State Management/BLoC/room/room_bloc.dart';
+import 'State Management/BLoC/device_usage/device_usage_bloc.dart';
+import 'package:halox_app/State Management/Provider State management/User Data Provider/Device Provider.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ProfileProvider(
-          fullName: "",
-          email: "",
-          phoneNumb: "",
-          occupation: "",
-        )),
+        ChangeNotifierProvider(
+          create: (_) => ProfileProvider(
+            fullName: "",
+            email: "",
+            phoneNumb: "",
+            occupation: "",
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => HomeNameProvider()),
         ChangeNotifierProvider(create: (_) => HomeListProvider()),
+        BlocProvider(create: (_) => RoomBloc(prefs: prefs)),
+        BlocProvider(create: (_) => DeviceUsageBloc(prefs: prefs)..add(LoadDeviceUsage())),
+        Provider<SharedPreferences>.value(value: prefs),
+        ChangeNotifierProvider(create: (_) => ScheduleTickProvider()),
       ],
-      child: MyApp(),
+      child: const MyApp(),
     ),
   );
 }
@@ -38,16 +53,15 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home:LoginPage()
+      home: LoginPage(),
     );
   }
 }

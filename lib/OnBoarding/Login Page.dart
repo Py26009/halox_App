@@ -1,38 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:halox_app/App_Screens/Home%20Bottom%20Nav%20Screens/firstScreen.dart';
 import '../App_Utilities/app_utilities.dart';
 import '../App_Utilities/validation_utils.dart';
-import '../State Management/Provider State management/User Data Provider/User Data Provider.dart';
-import 'package:provider/provider.dart';
 import '../Widgets/widgets.dart';
 import 'LoginPage.dart';
-import 'Basic_details.dart';
+import 'Sign_up Page.dart';
 
-class SignUpPage extends StatefulWidget {
-  const SignUpPage({Key? key}) : super(key: key);
+class LoginPage extends StatefulWidget {
+  const LoginPage({Key? key}) : super(key: key);
 
   @override
-  State<SignUpPage> createState() => _SignUpPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
-class _SignUpPageState extends State<SignUpPage> {
+class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _reEnterPassController = TextEditingController();
-
+  final TextEditingController _passwordController = TextEditingController();
   bool isPassVisible = false;
-  bool isRePassVisible = false;
 
   @override
   void dispose() {
     _emailController.dispose();
-    _passController.dispose();
-    _nameController.dispose();
-    _reEnterPassController.dispose();
+    _passwordController.dispose();
     super.dispose();
+  }
+
+  void _handleLogin() {
+    if (_formKey.currentState!.validate()) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => FirstScreen(homeName: "", userName: "")),
+      );
+    }
   }
 
   @override
@@ -50,15 +51,12 @@ class _SignUpPageState extends State<SignUpPage> {
                 color: Colors.white
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 15),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Image.asset("assets/images/cropped-Hal-x-3-100x100.webp", height: 60,),
-                    SizedBox(height: 21,),
-                    Text("Empowering you to save energy, money and time",style: mTextStyle24(mColor: AppColors.primaryBlueColor, mFontWeight: FontWeight.bold), textAlign: TextAlign.center,)
-                  ],
-                )
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 34),
+                child: Text(
+                  "Welcome back!",
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppColors.primaryBlueColor),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
 
@@ -89,7 +87,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         Row(
                           children: [
                             Text(
-                              "Let's get started!",
+                              "Sign In",
                               style: mTextStyle26(mColor: AppColors.primaryBlueColor),
                             ),
                             const SizedBox(width: 8),
@@ -103,17 +101,6 @@ class _SignUpPageState extends State<SignUpPage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-
-                        // Name
-                        Text("Name", style: mTextStyle14()),
-                        CustomTextField(
-                          controller: _nameController,
-                          hintText: "Enter your name",
-                          prefixIcon: Icons.person_outline,
-                          fillColor: Colors.white60,
-                          validator: ValidationUtils.validateName,
-                        ),
-                        const SizedBox(height: 15),
 
                         // Email
                         Text("Email", style: mTextStyle14()),
@@ -129,7 +116,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         // Password
                         Text("Password", style: mTextStyle14()),
                         CustomTextField(
-                          controller: _passController,
+                          controller: _passwordController,
                           hintText: "******",
                           obscureText: !isPassVisible,
                           prefixIcon: Icons.lock,
@@ -146,48 +133,29 @@ class _SignUpPageState extends State<SignUpPage> {
                         ),
                         const SizedBox(height: 15),
 
-                        // Re-enter Password
-                        Text("Re-enter Password", style: mTextStyle14()),
-                        CustomTextField(
-                          controller: _reEnterPassController,
-                          hintText: "******",
-                          obscureText: !isRePassVisible,
-                          prefixIcon: Icons.lock_open,
-                          fillColor: Colors.white60,
-                          suffixIcon: isRePassVisible
-                              ? Icons.visibility
-                              : Icons.visibility_off_outlined,
-                          onSuffixTap: () {
-                            setState(() {
-                              isRePassVisible = !isRePassVisible;
-                            });
-                          },
-                          validator: (value) {
-                            if (value != _passController.text) {
-                              return 'Passwords do not match';
-                            }
-                            return null;
-                          },
+                        // Forgot Password
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              // TODO: Implement forgot password functionality
+                            },
+                            child: Text(
+                              "Forgot Password?",
+                              style: mTextStyle14(
+                                mColor: AppColors.primaryBlueColor,
+                                mFontWeight: FontWeight.w600
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 25),
 
-                        // Sign Up Button
+                        // Sign In Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: () {
-                              if (_formKey.currentState!.validate()) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => BasicDetailsScreen(
-                                      name: _nameController.text,
-                                      email: _emailController.text,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
+                            onPressed: _handleLogin,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryBlueColor,
                               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -197,7 +165,7 @@ class _SignUpPageState extends State<SignUpPage> {
                               elevation: 4,
                             ),
                             child: Text(
-                              "SIGN UP",
+                              "SIGN IN",
                               style: mTextStyle16(
                                 mColor: Colors.white,
                                 mFontWeight: FontWeight.w600
@@ -207,27 +175,27 @@ class _SignUpPageState extends State<SignUpPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Sign up with google
+                        // Sign in with google
                         googleBar(
                           text: "Sign in with Google",
                           imgUrl: "assets/icons/google.svg",
                         ),
                         const SizedBox(height: 20),
 
-                        // Already a user?
+                        // Don't have an account?
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text("Already a user?", style: mTextStyle14()),
+                            Text("Don't have an account?", style: mTextStyle14()),
                             TextButton(
                               onPressed: () {
                                 Navigator.pushReplacement(
                                   context,
-                                  MaterialPageRoute(builder: (_) => LoginPage()),
+                                  MaterialPageRoute(builder: (_) => SignUpPage()),
                                 );
                               },
                               child: Text(
-                                "Sign In",
+                                "Sign Up",
                                 style: mTextStyle14(
                                   mColor: AppColors.primaryBlueColor,
                                   mFontWeight: FontWeight.w600
@@ -247,4 +215,4 @@ class _SignUpPageState extends State<SignUpPage> {
       ),
     );
   }
-}
+} 

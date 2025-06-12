@@ -30,7 +30,7 @@ class _HomeSetupInitialPageState extends State<HomeSetupInitialPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(height: 11,),
-          Image.network("https://th.bing.com/th/id/OIP.U_yJUqgdrZvxtPhDbLfZpwHaE8?w=350&h=191&c=7&r=0&o=5&dpr=1.3&pid=1.7"),
+          Image.asset("assets/images/home_Setup_image.jpg"),
           SizedBox(height: 11,),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),

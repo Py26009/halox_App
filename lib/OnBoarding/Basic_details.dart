@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:halox_app/App_Utilities/app_utilities.dart';
 import 'package:halox_app/Widgets/widgets.dart';
-
+import 'package:halox_app/App_Utilities/validation_utils.dart';
 import 'User_address_info.dart';
 
 class BasicDetailsScreen extends StatefulWidget {
@@ -14,7 +14,7 @@ class BasicDetailsScreen extends StatefulWidget {
 }
 
 class _BasicDetailsState extends State<BasicDetailsScreen> {
-
+  final _formKey = GlobalKey<FormState>();
   TextEditingController userNameController = TextEditingController();
   TextEditingController occupationController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
@@ -26,6 +26,14 @@ class _BasicDetailsState extends State<BasicDetailsScreen> {
   }
 
   @override
+  void dispose() {
+    userNameController.dispose();
+    occupationController.dispose();
+    phoneController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -33,120 +41,127 @@ class _BasicDetailsState extends State<BasicDetailsScreen> {
         centerTitle: true,
         elevation: 1,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Step Progress
+              _buildStepIndicator(),
 
-            // Step Progress
-            _buildStepIndicator(),
+              const SizedBox(height: 30),
 
-            const SizedBox(height: 30),
+              // Avatar with edit button
+              Center(
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.grey.shade200,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: InkWell(
+                        onTap: (){},
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.blue,
+                          child: Icon(Icons.edit, color: Colors.white, size: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-            // Avatar with edit button
-            Center(
-              child: Stack(
-                alignment: Alignment.bottomRight,
+              const SizedBox(height: 60),
+
+              // Name TextField
+              Text("Full Name", style: mTextStyle14()),
+              CustomTextField(
+                controller: userNameController,
+                hintText: "Enter your name",
+                prefixIcon: Icons.person,
+                fillColor: Colors.white60,
+                validator: ValidationUtils.validateName,
+              ),
+
+              const SizedBox(height: 20),
+
+              // Occupation TextField
+              Text("Occupation (Optional)", style: mTextStyle14()),
+              CustomTextField(
+                controller: occupationController,
+                hintText: "Enter your occupation",
+                prefixIcon: Icons.work,
+                fillColor: Colors.white60,
+                validator: ValidationUtils.validateOccupation,
+              ),
+
+              const SizedBox(height: 20),
+
+              // Phone number TextField
+              Text("Phone Number", style: mTextStyle14()),
+              CustomTextField(
+                controller: phoneController,
+                hintText: "+91",
+                keyboardType: TextInputType.phone,
+                prefixIcon: Icons.phone,
+                fillColor: Colors.white60,
+                validator: ValidationUtils.validatePhoneNumber,
+              ),
+              const SizedBox(height: 50),
+
+              // Buttons
+              Row(
                 children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey.shade200,
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: InkWell(
-                      onTap: (){
-
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_formKey.currentState!.validate()) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => AddressInfoScreen(
+                                fullName: widget.name,
+                                Occupation: occupationController.text,
+                                email: widget.email,
+                                phoneNumb: phoneController.text,
+                              ),
+                            ),
+                          );
+                        }
                       },
-                      child: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.blue,
-                        child: Icon(Icons.edit, color: Colors.white, size: 16),
+                      child: Text("Continue", style: mTextStyle16(mColor: Colors.white),),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlueColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: Text("Cancel", style: mTextStyle16(),),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.grey),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: 60),
-
-            // Name TextField
-            Text("Full Name"),
-            CustomTextField(
-              controller: userNameController,
-             hintText: "Enter your name",
-                prefixIcon: Icons.person,
-              fillColor: Colors.white60,
-            ),
-
-
-            const SizedBox(height: 20),
-
-            // Occupation TextField
-            Text("Occupation (Optional)"),
-            CustomTextField(
-              controller: occupationController,
-                hintText: "Enter your occupation",
-                prefixIcon: Icons.work,
-                fillColor: Colors.white60
-            ),
-
-            const SizedBox(height: 20),
-
-            // Phone number TextField
-            Text("Phone Number"),
-            CustomTextField(
-                controller: phoneController,
-                hintText: "+91",
-                keyboardType: TextInputType.phone,
-                prefixIcon: Icons.phone,
-                fillColor: Colors.white60
-            ),
-            const SizedBox(height: 50),
-
-
-
-            // Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                     Navigator.push(context, MaterialPageRoute(builder: (context)=>AddressInfoScreen(
-                       fullName: widget.name,
-                       Occupation: occupationController.text,
-                       email: widget.email,
-                       phoneNumb: phoneController.text,
-                     )));
-                    },
-                    child: Text("Continue", style: mTextStyle16(mColor: Colors.white),),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlueColor,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: Text("Cancel", style: mTextStyle16(),),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: Colors.grey),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

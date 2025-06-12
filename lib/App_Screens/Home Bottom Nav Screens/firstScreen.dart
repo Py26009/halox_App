@@ -3,51 +3,115 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 import '../../App_Utilities/app_utilities.dart';
+import '../../State Management/BLoC/room/room_event.dart';
+import '../../State Management/BLoC/room/room_state.dart';
 import '../../State Management/Provider State management/User Data Provider/All homes list provider.dart';
 import '../../State Management/Provider State management/User Data Provider/home_name Provider.dart';
+import '../../State Management/BLoC/room/room_bloc.dart';
+import '../../State Management/BLoC/device_usage/device_usage_bloc.dart';
+import '../../State Management/BLoC/device_usage/device_usage_state.dart';
+import '../../State Management/BLoC/device_usage/device_usage_event.dart';
+import '../../State Management/Provider State management/User Data Provider/Device Provider.dart';
 import 'Specific room Screen.dart';
 
+/// FirstScreen is the main screen that displays all rooms in the current home.
+/// It provides functionality to:
+/// - View all rooms in a grid layout
+/// - Add new rooms
+/// - Control devices in rooms
+/// - Manage room settings
 class FirstScreen extends StatefulWidget {
+  /// The name of the current home being displayed
   final String homeName;
+  
+  /// The name of the current user
   final String userName;
+  
   FirstScreen({required this.homeName, required this.userName});
 
   @override
   State<FirstScreen> createState() => _FirstScreenState();
 }
 
-class _FirstScreenState extends State<FirstScreen>{
-
+class _FirstScreenState extends State<FirstScreen> {
+  /// Controller for home name input in add home dialog
   TextEditingController hName = TextEditingController();
+  
+  /// Error text for home name validation
   String? errorText;
 
-  // Store rooms per home - Map<HomeName, List<RoomData>>
-  Map<String, List<RoomData>> _homeRooms = {};
+  /// Currently selected device type filter
+  String? selectedDeviceFilter;
+
+  /// Map of device types with their icons and colors
+  final Map<String, Map<String, dynamic>> deviceTypes = {
+    'All Devices': {
+      'icon': Icons.devices,
+      'color': Colors.blue,
+    },
+    'Smart Light': {
+      'icon': Icons.lightbulb_outline,
+      'color': Colors.amber,
+    },
+    'Smart Fan': {
+      'icon': Icons.air,
+      'color': Colors.blue,
+    },
+    'Air Conditioner': {
+      'icon': Icons.ac_unit,
+      'color': Colors.lightBlue,
+    },
+    'Smart TV': {
+      'icon': Icons.tv,
+      'color': Colors.black,
+    },
+    'Smart Speaker': {
+      'icon': Icons.speaker,
+      'color': Colors.purple,
+    },
+    'Smart Plug': {
+      'icon': Icons.power,
+      'color': Colors.green,
+    },
+    'Smart Lock': {
+      'icon': Icons.lock,
+      'color': Colors.brown,
+    },
+    'Security Camera': {
+      'icon': Icons.videocam,
+      'color': Colors.red,
+    },
+    'Thermostat': {
+      'icon': Icons.thermostat,
+      'color': Colors.orange,
+    },
+    'Smart Curtains': {
+      'icon': Icons.curtains,
+      'color': Colors.indigo,
+    },
+  };
 
   @override
   void initState() {
     super.initState();
+    // Initialize home name and load rooms when screen is first created
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<HomeNameProvider>(context, listen: false);
       final homeListProvider = Provider.of<HomeListProvider>(context, listen: false);
       provider.setHomeName(widget.homeName);
       homeListProvider.setInitialHome(widget.homeName);
-
-      // Initialize empty room list for the initial home if not exists
-      if (!_homeRooms.containsKey(widget.homeName)) {
-        _homeRooms[widget.homeName] = [];
-      }
+      
+      // Load rooms for the initial home
+      context.read<RoomBloc>().add(LoadRooms(widget.homeName));
     });
   }
 
-  // Get current home's rooms
-  List<RoomData> get _currentHomeRooms {
-    final currentHome = Provider.of<HomeNameProvider>(context, listen: false).homeName;
-    return _homeRooms[currentHome] ?? [];
-  }
-
+  /// Shows a dropdown menu of available homes for switching
   void _showHomeDropdown() {
     final renderBox = context.findRenderObject() as RenderBox;
     final offset = renderBox.localToGlobal(Offset.zero);
@@ -71,7 +135,7 @@ class _FirstScreenState extends State<FirstScreen>{
             Positioned.fill(child: Container(color: Colors.transparent)),
             Positioned(
               top: offset.dy + 60,
-              right: 80, // Adjust as per design
+              right: 80,
               child: Material(
                 elevation: 4,
                 borderRadius: BorderRadius.circular(8),
@@ -87,14 +151,8 @@ class _FirstScreenState extends State<FirstScreen>{
                       return ListTile(
                         title: Text(home),
                         onTap: () {
-                          // Initialize empty room list for this home if not exists
-                          if (!_homeRooms.containsKey(home)) {
-                            _homeRooms[home] = [];
-                          }
-
                           homeNameProvider.setHomeName(home);
-                          setState(() {}); // Refresh UI to show rooms for selected home
-
+                          context.read<RoomBloc>().add(SwitchHome(home));
                           if (!isRemoved) {
                             entry?.remove();
                             isRemoved = true;
@@ -166,7 +224,7 @@ class _FirstScreenState extends State<FirstScreen>{
                       _menuItem("Filter", () {
                         _menuOverlay?.remove();
                         _menuOverlay = null;
-                        // TODO: Handle Filter
+                        _showFilterDialog();
                       }),
                     ],
                   ),
@@ -226,6 +284,7 @@ class _FirstScreenState extends State<FirstScreen>{
                         } else {
                           final homeListProvider = Provider.of<HomeListProvider>(context, listen: false);
                           final homeNameProvider = Provider.of<HomeNameProvider>(context, listen: false);
+                          final roomBloc = context.read<RoomBloc>();
 
                           // Check if home already exists
                           if (homeListProvider.homeList.contains(newHomeName)) {
@@ -235,10 +294,7 @@ class _FirstScreenState extends State<FirstScreen>{
                           } else {
                             // Add new home to the list
                             homeListProvider.addHome(newHomeName);
-                            // Initialize empty room list for new home
-                            _homeRooms[newHomeName] = [];
-                            // Set the new home as current home
-                            homeNameProvider.setHomeName(newHomeName);
+                            roomBloc.add(AddHome(newHomeName));
 
                             print("New Home Name: $newHomeName");
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -262,6 +318,7 @@ class _FirstScreenState extends State<FirstScreen>{
 
   void _showDeleteHomeDialog() {
     final homeListProvider = Provider.of<HomeListProvider>(context, listen: false);
+    final roomBloc = context.read<RoomBloc>();
 
     if (homeListProvider.homeList.length <= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -308,26 +365,19 @@ class _FirstScreenState extends State<FirstScreen>{
   void _deleteCurrentHome() {
     final homeListProvider = Provider.of<HomeListProvider>(context, listen: false);
     final homeNameProvider = Provider.of<HomeNameProvider>(context, listen: false);
+    final roomBloc = context.read<RoomBloc>();
     String deletedHome = homeNameProvider.homeName;
 
-    setState(() {
-      // Remove from provider
-      homeListProvider.removeHome(deletedHome);
+    // Remove from providers
+    homeListProvider.removeHome(deletedHome);
+    roomBloc.add(RemoveHome(deletedHome));
 
-      // Remove rooms data for this home
-      _homeRooms.remove(deletedHome);
-
-      // Set new current home (first available home)
-      if (homeListProvider.homeList.isNotEmpty) {
-        String newCurrentHome = homeListProvider.homeList.first;
-        homeNameProvider.setHomeName(newCurrentHome);
-
-        // Initialize empty room list for new current home if not exists
-        if (!_homeRooms.containsKey(newCurrentHome)) {
-          _homeRooms[newCurrentHome] = [];
-        }
-      }
-    });
+    // Set new current home (first available home)
+    if (homeListProvider.homeList.isNotEmpty) {
+      String newCurrentHome = homeListProvider.homeList.first;
+      homeNameProvider.setHomeName(newCurrentHome);
+      roomBloc.add(SwitchHome(newCurrentHome));
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -344,18 +394,44 @@ class _FirstScreenState extends State<FirstScreen>{
     );
   }
 
-  /// Categorization of rooms
+  /// Shows a bottom sheet with available room types for adding a new room
   void _showRoomOptions(BuildContext context) {
-    final Map<String, RoomData> roomOptions = {
-      'Bed Room': RoomData("Bed Room", Colors.pinkAccent, Icons.bed),
-      'Living Room': RoomData("Living Room", Colors.lightBlueAccent, Icons.chair),
-      'Guest Room': RoomData("Guest Room", Colors.grey, Icons.bed_outlined),
-      'Study Room': RoomData("Study Room", Colors.amberAccent, Icons.chair_alt),
-      'Kitchen': RoomData("Kitchen", Colors.purpleAccent, Icons.kitchen),
-      'Others': RoomData("Others", Colors.lightGreenAccent, Icons.other_houses),
+    /// Map of room types with their respective icons and colors
+    final Map<String, Map<String, dynamic>> roomOptions = {
+      'Bedroom': {
+        'icon': Icons.bed,
+        'color': Color(0xFF7C4DFF), // Vibrant purple
+      },
+      'Living Room': {
+        'icon': Icons.chair,
+        'color': Color(0xFF00BFA5), // Vibrant teal
+      },
+      'Kitchen': {
+        'icon': Icons.kitchen,
+        'color': Color(0xFFFF6B6B), // Vibrant coral
+      },
+      'Bathroom': {
+        'icon': Icons.bathtub,
+        'color': Color(0xFF4FC3F7), // Vibrant light blue
+      },
+      'Office': {
+        'icon': Icons.computer,
+        'color': Color(0xFF66BB6A), // Vibrant green
+      },
+      'Garage': {
+        'icon': Icons.garage,
+        'color': Color(0xFF78909C), // Vibrant blue grey
+      },
+      'Guest Room': {
+        'icon': Icons.weekend,
+        'color': Color(0xFFFFB74D), // Vibrant orange
+      },
+      'Lobby': {
+        'icon': Icons.door_front_door,
+        'color': Color(0xFF9575CD), // Vibrant deep purple
+      },
     };
 
-    /// Bottom Sheet for option for rooms
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -366,35 +442,52 @@ class _FirstScreenState extends State<FirstScreen>{
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: roomOptions.entries.map((entry) {
-              return ListTile(
-                  title: Text(entry.key),
-                  leading: const Icon(Icons.meeting_room),
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Allow all rooms to be added, regardless of type duplicates
-                    _showRenameDialog(context, entry.value);
-                  }
-              );
-            }).toList(),
+            children: [
+              Text(
+                "Select Room Type",
+                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: roomOptions.entries.map((entry) {
+                    return ListTile(
+                      title: Text(entry.key),
+                      leading: Icon(
+                        entry.value['icon'],
+                        color: entry.value['color'],
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showRoomNameDialog(context, entry.key, entry.value['color'], entry.value['icon']);
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  /// Rename Dialog box
-  void _showRenameDialog(BuildContext context, RoomData room) {
-    TextEditingController _controller = TextEditingController(text: room.title);
+  /// Shows a dialog to enter a name for the new room
+  void _showRoomNameDialog(BuildContext context, String roomType, Color color, IconData icon) {
+    TextEditingController _controller = TextEditingController(text: roomType);
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text("Rename Room"),
+          title: const Text("Name Your Room"),
           content: TextField(
             controller: _controller,
-            decoration: const InputDecoration(labelText: "Room Name"),
+            decoration: const InputDecoration(
+              labelText: "Room Name",
+              hintText: "Enter room name",
+            ),
           ),
           actions: [
             TextButton(
@@ -405,35 +498,39 @@ class _FirstScreenState extends State<FirstScreen>{
               onPressed: () {
                 final newName = _controller.text.trim();
                 final currentHome = Provider.of<HomeNameProvider>(context, listen: false).homeName;
+                final roomBloc = context.read<RoomBloc>();
 
                 if (newName.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Room name cannot be empty.')),
+                    const SnackBar(content: Text('Room name cannot be empty.')),
                   );
                   return;
                 }
 
                 // Check if room name already exists in current home
-                if (_homeRooms[currentHome]?.any((r) => r.title.toLowerCase() == newName.toLowerCase()) ?? false) {
+                if (roomBloc.state.rooms[currentHome]?.any((r) => r.title.toLowerCase() == newName.toLowerCase()) ?? false) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Room name already exists in this home. Choose a different name.')),
+                    const SnackBar(content: Text('Room name already exists in this home. Choose a different name.')),
                   );
                   return;
                 }
 
-                if (!mounted) return; // Check widget still mounted before setState
+                // Add the room and immediately trigger a state update
+                roomBloc.add(AddRoom(
+                  homeName: currentHome,
+                  roomName: newName,
+                  color: color,
+                  icon: icon,
+                ));
 
-                setState(() {
-                  // Add room to current home's room list
-                  if (_homeRooms[currentHome] == null) {
-                    _homeRooms[currentHome] = [];
-                  }
-                  _homeRooms[currentHome]!.add(RoomData(newName, room.color, room.icon));
-                });
+                // Show success message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$newName added successfully!')),
+                );
 
                 Navigator.pop(context);
               },
-              child: const Text("Save"),
+              child: const Text("Add"),
             ),
           ],
         );
@@ -441,74 +538,333 @@ class _FirstScreenState extends State<FirstScreen>{
     );
   }
 
-  Widget _buildMyRoomsSection() {
-    final currentHome = Provider.of<HomeNameProvider>(context).homeName;
-    final currentRooms = _homeRooms[currentHome] ?? [];
+  /// Shows a filter dialog
+  void _showFilterDialog() {
+    final currentHome = Provider.of<HomeNameProvider>(context, listen: false).homeName;
+    final rooms = context.read<RoomBloc>().state.rooms[currentHome] ?? [];
 
-    if (currentRooms.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Select Device Type'),
+        content: Container(
+          width: double.maxFinite,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 16),
-              Text(
-                "No area is selected by you.",
-                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500),
+            children: deviceTypes.entries.map((entry) {
+              return ListTile(
+                leading: Icon(entry.value['icon'], color: entry.value['color']),
+                title: Text(entry.key),
+                onTap: () {
+                  setState(() {
+                    selectedDeviceFilter = entry.key;
+                  });
+                  Navigator.pop(context); // Close first dialog
+                  if (entry.key == 'All Devices') {
+                    setState(() {
+                      selectedDeviceFilter = null;
+                    });
+                  } else {
+                    _showRoomsWithDevice(entry.key); // Show second dialog
+                  }
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                selectedDeviceFilter = null;
+              });
+              Navigator.pop(context);
+            },
+            child: Text('Clear Filter'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRoomsWithDevice(String deviceType) {
+    context.read<DeviceUsageBloc>().add(IncrementDeviceUsage(deviceType));
+    
+    final currentHome = Provider.of<HomeNameProvider>(context, listen: false).homeName;
+    final rooms = context.read<RoomBloc>().state.rooms[currentHome] ?? [];
+    final scheduleTickProvider = Provider.of<ScheduleTickProvider>(context, listen: false);
+    
+    // Filter rooms that have the selected device type
+    final roomsWithDevice = rooms.where((room) {
+      final roomKey = '${currentHome}_${room.title}';
+      final devices = scheduleTickProvider.getDevicesForRoom(roomKey);
+      return devices.any((device) => device.type == deviceType);
+    }).toList();
+
+    if (roomsWithDevice.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No rooms found with $deviceType')),
+      );
+      setState(() {
+        selectedDeviceFilter = null;
+      });
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+            deviceType,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: Container(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: roomsWithDevice.map((room) {
+                  final roomKey = '${currentHome}_${room.title}';
+                  final devices = scheduleTickProvider.getDevicesForRoom(roomKey);
+                  final device = devices.firstWhere((d) => d.type == deviceType);
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          room.title,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: room.color,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: device.color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: device.color.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  device.name,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: device.isOn ? Colors.green : Colors.red,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    device.isOn ? "Connected" : "Disconnected",
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: device.isOn,
+                              onChanged: (value) {
+                                // Update device state
+                                final index = devices.indexOf(device);
+                                if (index != -1) {
+                                  setDialogState(() {
+                                    devices[index].isOn = value;
+                                  });
+                                  scheduleTickProvider.updateDevice(roomKey, devices[index]);
+                                  setState(() {}); // Refresh main screen
+                                }
+                              },
+                              activeColor: device.color,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                }).toList(),
               ),
-              const SizedBox(height: 8),
-              Text(
-                "Click on '+' icon to select your area to proceed.",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  selectedDeviceFilter = null;
+                });
+                Navigator.pop(context);
+              },
+              child: Text(
+                'Clear Filter',
+                style: GoogleFonts.poppins(color: Colors.red),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Close',
+                style: GoogleFonts.poppins(color: Colors.blue),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds the grid of rooms for the current home
+  Widget _buildMyRoomsSection() {
+    return BlocBuilder<RoomBloc, RoomState>(
+      builder: (context, state) {
+        final currentHome = Provider.of<HomeNameProvider>(context).homeName;
+        var currentRooms = state.rooms[currentHome] ?? [];
+        final scheduleTickProvider = Provider.of<ScheduleTickProvider>(context);
+
+        // Filter rooms based on selected device type
+        if (selectedDeviceFilter != null && selectedDeviceFilter != 'All Devices') {
+          currentRooms = currentRooms.where((room) {
+            final roomKey = '${currentHome}_${room.title}';
+            final devices = scheduleTickProvider.getDevicesForRoom(roomKey);
+            return devices.any((device) => device.type == selectedDeviceFilter);
+          }).toList();
+        }
+
+        if (currentRooms.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 16),
+                  Text(
+                    selectedDeviceFilter != null
+                        ? "No rooms found with ${selectedDeviceFilter}"
+                        : "No area is selected by you.",
+                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    selectedDeviceFilter != null
+                        ? "Try selecting a different device type"
+                        : "Click on '+' icon to select your area to proceed.",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (selectedDeviceFilter != null && selectedDeviceFilter != 'All Devices')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Row(
+                    children: [
+                      Icon(deviceTypes[selectedDeviceFilter]!['icon'],
+                          color: deviceTypes[selectedDeviceFilter]!['color']),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Showing rooms with ${selectedDeviceFilter}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            selectedDeviceFilter = null;
+                          });
+                        },
+                        icon: Icon(Icons.clear, size: 16),
+                        label: Text('Clear'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              GridView.count(
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.3,
+                children: List.generate(currentRooms.length, (index) {
+                  final room = currentRooms[index];
+                  return RoomCard(
+                    title: room.title,
+                    color: room.color,
+                    imageAsset: room.icon,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SpecificRoomScreen(
+                            roomName: room.title,
+                            homeName: currentHome,
+                            userName: widget.userName,
+                          ),
+                        ),
+                      );
+                    },
+                    onDelete: () {
+                      context.read<RoomBloc>().add(RemoveRoom(
+                        homeName: currentHome,
+                        index: index,
+                      ));
+                    },
+                    homeName: currentHome,
+                  );
+                }),
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    // GridView for added rooms in current home
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 32),
-      child: GridView.count(
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        shrinkWrap: true,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.3,
-                 children: currentRooms.asMap().entries.map((entry) {
-                int index = entry.key;
-              RoomData room = entry.value;
-                  return RoomCard(
-                title: room.title,
-                  color: room.color,
-                  imageAsset: room.icon,
-                   onTap: () {
-    Navigator.push(context, MaterialPageRoute(builder: (context)=>SpecificRoomScreen(roomName: "BedRoom", homeName: widget.homeName, userName: widget.userName)));
-           Navigator.push(
-                context,
-                     MaterialPageRoute(
-             builder: (context) => SpecificRoomScreen(
-              roomName: room.title,
-                  homeName: currentHome,
-                   userName: widget.userName,
-              ),
-                ),
-                    );
-               },
-                onDelete: () {
-                setState(() {
-                _homeRooms[currentHome]?.removeAt(index);
-                    });
-                    },
-               );
-                     }).toList(),
-                )
-              );
-                }
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -519,7 +875,7 @@ class _FirstScreenState extends State<FirstScreen>{
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: Padding(
-        padding: const EdgeInsets.only( right: 24, left: 20, top: 11.0),
+        padding: const EdgeInsets.only(right: 24, left: 20, top: 11.0),
         child: ListView(
           children: [
             const SizedBox(height: 20),
@@ -530,6 +886,8 @@ class _FirstScreenState extends State<FirstScreen>{
             Text("All Rooms", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 20),
             _buildMyRoomsSection(),
+            const SizedBox(height: 30),
+            _buildFrequentlyUsedDevices(),
             const SizedBox(height: 20),
           ],
         ),
@@ -598,6 +956,80 @@ class _FirstScreenState extends State<FirstScreen>{
     );
   }
 
+  Widget _buildFrequentlyUsedDevices() {
+    return BlocBuilder<DeviceUsageBloc, DeviceUsageState>(
+      builder: (context, state) {
+        final deviceUsageCount = state.deviceUsageCount;
+        final frequentDevices = deviceTypes.entries
+            .where((entry) => deviceUsageCount.containsKey(entry.key))
+            .toList()
+          ..sort((a, b) => (deviceUsageCount[b.key] ?? 0).compareTo(deviceUsageCount[a.key] ?? 0));
+        
+        final topDevices = frequentDevices.take(4).toList();
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Frequently Used Devices",
+              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 20),
+            Column(
+              children: topDevices.map((entry) {
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: entry.value['color'].withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: entry.value['color'].withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      context.read<DeviceUsageBloc>().add(IncrementDeviceUsage(entry.key));
+                      _showRoomsWithDevice(entry.key);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            entry.value['icon'],
+                            color: entry.value['color'],
+                            size: 28,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              entry.key,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _menuOverlay?.remove();
@@ -605,249 +1037,400 @@ class _FirstScreenState extends State<FirstScreen>{
   }
 }
 
-// Keep the rest of your classes (RoomCard, _IconOption, etc.) unchanged
-class RoomCard extends StatefulWidget {
+/// RoomCard represents a single room in the grid layout.
+/// It displays the room's name, icon, and color, and provides
+/// quick access to room controls through long press.
+class RoomCard extends StatelessWidget {
+  /// The name of the room
   final String title;
+  
+  /// The color theme of the room
   final Color color;
+  
+  /// The icon representing the room type
   final IconData imageAsset;
-  final VoidCallback onDelete;
+  
+  /// Callback when the room is tapped
   final VoidCallback onTap;
+  
+  /// Callback when the room is deleted
+  final VoidCallback onDelete;
+  
+  /// The name of the home this room belongs to
+  final String homeName;
 
   const RoomCard({
-    super.key,
+    Key? key,
     required this.title,
     required this.color,
     required this.imageAsset,
-    required this.onDelete,
     required this.onTap,
-  });
+    required this.onDelete,
+    required this.homeName,
+  }) : super(key: key);
 
-  @override
-  State<RoomCard> createState() => _RoomCardState();
-}
-
-class _RoomCardState extends State<RoomCard> {
-  OverlayEntry? _overlayEntry;
-  bool _showDelete = false;
-  Offset _cardOffset = Offset.zero;
-  Size _cardSize = Size.zero;
-  bool isLightOn = false;
-  bool isFanOn = false;
-  bool isAcOn = false;
-
-  void _showOverlayBar() {
-    final overlay = Overlay.of(context);
+  /// Shows a horizontal row of quick control buttons when the room is long pressed
+  void _showQuickControls(BuildContext context) {
     final renderBox = context.findRenderObject() as RenderBox;
-    _cardOffset = renderBox.localToGlobal(Offset.zero);
-    _cardSize = renderBox.size;
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
 
-    late OverlayEntry entry;
+    OverlayEntry? overlayEntry;
+    bool isRemoved = false;
 
-    entry = OverlayEntry(
+    overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: offset.dy + size.height / 2,
+        left: offset.dx + size.width / 2,
+        child: Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildControlButton(
+                  context,
+                  Icons.lightbulb_outline,
+                  Colors.amber,
+                  () {
+                    if (!isRemoved) {
+                      overlayEntry?.remove();
+                      isRemoved = true;
+                      _showLightsDialog(context);
+                    }
+                  },
+                ),
+                const SizedBox(width: 16),
+                _buildControlButton(
+                  context,
+                  Icons.air,
+                  Colors.blue,
+                  () {
+                    // Fan control functionality
+                    if (!isRemoved) {
+                      overlayEntry?.remove();
+                      isRemoved = true;
+                    }
+                  },
+                ),
+                const SizedBox(width: 16),
+                _buildControlButton(
+                  context,
+                  Icons.ac_unit,
+                  Colors.lightBlue,
+                  () {
+                    // AC control functionality
+                    if (!isRemoved) {
+                      overlayEntry?.remove();
+                      isRemoved = true;
+                    }
+                  },
+                ),
+                const SizedBox(width: 16),
+                _buildControlButton(
+                  context,
+                  Icons.more_vert,
+                  Colors.grey,
+                  () {
+                    if (!isRemoved) {
+                      overlayEntry?.remove();
+                      isRemoved = true;
+                      _showMoreOptions(context);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(overlayEntry);
+  }
+
+  /// Builds a circular control button with the specified icon and color
+  Widget _buildControlButton(BuildContext context, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: color, size: 24),
+      ),
+    );
+  }
+
+  /// Shows a dialog with all smart lights in the room
+  void _showLightsDialog(BuildContext context) {
+    final roomKey = '${homeName}_$title';
+    final scheduleTickProvider = Provider.of<ScheduleTickProvider>(context, listen: false);
+    final devices = scheduleTickProvider.getDevicesForRoom(roomKey);
+    final lights = devices.where((device) => device.type == 'Smart Light').toList();
+
+    if (lights.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No smart lights found in this room')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Smart Lights in $title'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: lights.map((device) {
+              return ListTile(
+                leading: Icon(device.icon, color: device.color),
+                title: Text(device.name),
+                trailing: Switch(
+                  value: device.isOn,
+                  onChanged: (value) {
+                    final index = lights.indexOf(device);
+                    if (index != -1) {
+                      lights[index].isOn = value;
+                      scheduleTickProvider.updateDevice(roomKey, lights[index]);
+                    }
+                    Navigator.pop(context);
+                    _showLightsDialog(context); // Refresh dialog
+                  },
+                  activeColor: device.color,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shows a dropdown menu with additional options for the room
+  void _showMoreOptions(BuildContext context) {
+    final renderBox = context.findRenderObject() as RenderBox;
+    final offset = renderBox.localToGlobal(Offset.zero);
+
+    OverlayEntry? overlayEntry;
+    bool isRemoved = false;
+
+    overlayEntry = OverlayEntry(
       builder: (context) => GestureDetector(
         onTap: () {
-          entry.remove();
-          _overlayEntry = null;
+          if (!isRemoved) {
+            overlayEntry?.remove();
+            isRemoved = true;
+          }
         },
         child: Stack(
           children: [
-            // Transparent background to detect outside taps
-            Positioned.fill(
-              child: Container(color: Colors.transparent),
-            ),
-
-            // Icon bar
+            Positioned.fill(child: Container(color: Colors.transparent)),
             Positioned(
-              left: _cardOffset.dx,
-              top: _cardOffset.dy - 60,
+              top: offset.dy + 60,
+              right: 20,
               child: Material(
-                color: Colors.transparent,
+                elevation: 4,
+                borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  width: 200,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 6,
-                      ),
-                    ],
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Row(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _IconOption(
-                        icon: Icons.light,
-                        label: "Light",
-                        onTap: (){
-                          setState(() {
-                            isLightOn=!isLightOn;
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _overlayEntry?.remove();
-                            });
-                          });
-                        },
-                        iColor: isLightOn? Colors.yellow: Colors.grey,
-                      ),
-                      const SizedBox(width: 20),
-                      _IconOption(
-                        icon: FontAwesomeIcons.fan,
-                        label: "Fan",
-                        onTap: (){
-                          setState(() {
-                            isFanOn=!isFanOn;
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _overlayEntry?.remove();
-
-                            });
-                          });
-                        },
-                        iColor: isFanOn? Colors.yellow: Colors.grey ,),
-                      const SizedBox(width: 20),
-                      _IconOption(
-                        icon: FontAwesomeIcons.snowflake,
-                        label: "AC",
-                        iColor: isAcOn?Colors.yellow: Colors.grey,
-                        onTap: (){
-                          setState(() {
-                            isAcOn=!isAcOn;
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _overlayEntry?.remove();
-                            });
-                          });
-                        },),
-                      const SizedBox(width: 20),
-                      GestureDetector(
+                      ListTile(
+                        leading: Icon(Icons.devices, color: Colors.blue),
+                        title: Text("Show All Added Devices"),
                         onTap: () {
-                          setState(() {
-                            _showDelete = !_showDelete;
-                          });
-                          entry.markNeedsBuild();
+                          if (!isRemoved) {
+                            overlayEntry?.remove();
+                            isRemoved = true;
+                            _showAllDevicesDialog(context);
+                          }
                         },
-                        child: const Icon(Icons.more_vert, color: Colors.black54),
+                      ),
+                      Divider(height: 1),
+                      ListTile(
+                        leading: Icon(Icons.delete, color: Colors.red),
+                        title: Text("Delete Area"),
+                        onTap: () {
+                          if (!isRemoved) {
+                            overlayEntry?.remove();
+                            isRemoved = true;
+                            _showDeleteConfirmation(context);
+                          }
+                        },
                       ),
                     ],
                   ),
                 ),
               ),
             ),
-
-            // Delete Popup (conditionally shown)
-            if (_showDelete)
-              Positioned(
-                left: _cardOffset.dx + _cardSize.width / 2,
-                top: _cardOffset.dy - 120,
-                child: Material(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                    child: TextButton.icon(
-                      onPressed: () {
-                        widget.onDelete();
-                        entry.remove();
-                        _overlayEntry = null;
-                      },
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      label: const Text("Delete", style: TextStyle(color: Colors.red)),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
     );
 
-    overlay.insert(entry);
-    _overlayEntry = entry;
+    Overlay.of(context).insert(overlayEntry);
+  }
+
+  /// Shows a dialog with all devices in the room
+  void _showAllDevicesDialog(BuildContext context) {
+    final roomKey = '${homeName}_$title';
+    final scheduleTickProvider = Provider.of<ScheduleTickProvider>(context, listen: false);
+    final devices = scheduleTickProvider.getDevicesForRoom(roomKey);
+
+    if (devices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No devices found in this room')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('All Devices in $title'),
+        content: Container(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: devices.map((device) {
+              return ListTile(
+                leading: Icon(device.icon, color: device.color),
+                title: Text(device.name),
+                subtitle: Text(device.type),
+                trailing: Switch(
+                  value: device.isOn,
+                  onChanged: (value) {
+                    final index = devices.indexOf(device);
+                    if (index != -1) {
+                      devices[index].isOn = value;
+                      scheduleTickProvider.updateDevice(roomKey, devices[index]);
+                    }
+                    Navigator.pop(context);
+                    _showAllDevicesDialog(context); // Refresh dialog
+                  },
+                  activeColor: device.color,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shows a confirmation dialog before deleting the room
+  void _showDeleteConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Area'),
+        content: Text('Are you sure you want to delete "$title"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Get the current home name and room index
+              final currentHome = homeName;
+              final roomBloc = context.read<RoomBloc>();
+              final rooms = roomBloc.state.rooms[currentHome] ?? [];
+              final roomIndex = rooms.indexWhere((room) => room.title == title);
+              
+              if (roomIndex != -1) {
+                // Remove the room using RoomBloc
+                roomBloc.add(RemoveRoom(
+                  homeName: currentHome,
+                  index: roomIndex,
+                ));
+                
+                // Show success message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$title has been deleted')),
+                );
+              }
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: _showOverlayBar,
+      onTap: onTap,
+      onLongPress: () => _showQuickControls(context),
       child: Container(
         decoration: BoxDecoration(
-          color: widget.color.withOpacity(0.3),
+          color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withOpacity(0.3),
+            width: 1,
+          ),
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(widget.imageAsset, size: 36, color: widget.color),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(
+                  imageAsset,
+                  size: 32,
+                  color: color,
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
-            Text(widget.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _overlayEntry?.remove();
-    super.dispose();
-  }
-}
-
-class _IconOption extends StatelessWidget {
-  final IconData icon;
-  final Color iColor;
-  final String label;
-  VoidCallback ? onTap;
-
-  _IconOption({required this.icon, required this.label, required this.onTap, required this.iColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        InkWell(
-            onTap: onTap,
-            child: Icon(icon, size: 28, color: iColor)),
-        const SizedBox(height: 2),
-        Text(label, style: mTextStyle14()),
-      ],
-    );
-  }
-}
-
-class _DeviceItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _DeviceItem({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 32, color: Colors.blue),
-        const SizedBox(height: 8),
-        Text(label),
-      ],
-    );
-  }
-}
-
-class RoomData {
-  final String title;
-  final Color color;
-  final IconData icon;
-
-  RoomData(this.title, this.color, this.icon);
 }
